@@ -1,0 +1,334 @@
+{
+  "name": "09_scraping_slack(block message)",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "781688b8-28ae-4b75-b411-41cb1caa26ec",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/scrape",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"onlyMainContent\": true,\n  \"url\": \"https://news.naver.com/section/105\",\n  \"formats\": [\n    {\n      \"type\": \"json\",\n      \"schema\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"articles\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"title\": {\n                  \"type\": \"string\"\n                },\n                \"url\": {\n                  \"type\": \"string\"\n                }\n              },\n              \"required\": [\n                \"title\",\n                \"url\"\n              ]\n            }\n          }\n        },\n        \"required\": [\n          \"articles\"\n        ]\n      }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "63aaabf2-bf17-4b46-9f8c-05fdacd41cb6",
+      "name": "Firecrawl Extract - 네이버뉴스"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data.json.articles",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "997e7401-4b67-4a87-81b2-48944cf037ba",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "b2511377-b5f0-4c49-aa6a-ab84a308d243",
+      "name": "네이버뉴스 가져오기"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "news_text",
+              "cssSelector": "#dic_area"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "d4246a39-986c-44d6-8210-73e4fc34e1a1",
+      "name": "HTML -> 본문데이터 뽑기"
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "SLACK_ID",
+          "mode": "list",
+          "cachedResultName": "moonjungkim99"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ {blocks: $json.blocks} }}",
+        "text": "뉴스 도착!",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        704,
+        320
+      ],
+      "id": "af671fe5-2d88-41ea-96f5-dedc406b8608",
+      "name": "Send a message"
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "news_text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "70888c3b-4de9-453d-9f6c-6551fc4ad2db",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4b1ea122-e235-4405-8ee6-e082dc28e57a",
+              "name": "news_text",
+              "value": "=TITLE: {{ $('Split Out').item.json.title }}\n\nURL: {{ $('Split Out').item.json.url }}\n\nCONTENT: {{ $json.news_text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "f0bb038b-a11d-447a-82ea-ce6ef486201c",
+      "name": "제목+링크+내용"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\nconst news = $input.all();\nconst blocks = [];\n\nfor (const item of news) {\n  blocks.push({\n    type: \"section\",\n    text: {\n      type: \"mrkdwn\",\n      text: `*<${item.json.url}|${item.json.title}>*\\n${item.json.content}`\n    }\n  });\n  blocks.push({type: 'divider'});\n}\n\nreturn {json: {blocks}}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        320
+      ],
+      "id": "433a4631-c9fe-48c0-a9ba-c5f30ba87fa3",
+      "name": "슬랙 블럭에 맞게 바꾸기"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output[0].content[0].text.news",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        336,
+        320
+      ],
+      "id": "f21c24d5-ce7e-42a9-8e76-8b9ddd2b0ea7",
+      "name": "다시 나누기"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "너는 뉴스 요약기야. 여러개의 뉴스가 들어올텐데, 각 뉴스마다 3줄 요약을 깔끔하게 해줘"
+            },
+            {
+              "content": "={{ $json.news_text.toJsonString() }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_schema",
+              "schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"news\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"url\": {\n            \"type\": \"string\"\n          },\n          \"content\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\"title\", \"url\", \"content\"],\n        \"additionalProperties\": false\n      }\n    }\n  },\n  \"required\": [\"news\"],\n  \"additionalProperties\": false\n}\n"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        32,
+        320
+      ],
+      "id": "7090e2fa-229e-4847-a658-004814c23553",
+      "name": "뉴스요약기(StructuredOutput)"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Firecrawl Extract - 네이버뉴스",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firecrawl Extract - 네이버뉴스": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "네이버뉴스 가져오기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "네이버뉴스 가져오기": {
+      "main": [
+        [
+          {
+            "node": "HTML -> 본문데이터 뽑기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML -> 본문데이터 뽑기": {
+      "main": [
+        [
+          {
+            "node": "제목+링크+내용",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "뉴스요약기(StructuredOutput)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "제목+링크+내용": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "슬랙 블럭에 맞게 바꾸기": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "다시 나누기": {
+      "main": [
+        [
+          {
+            "node": "슬랙 블럭에 맞게 바꾸기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "뉴스요약기(StructuredOutput)": {
+      "main": [
+        [
+          {
+            "node": "다시 나누기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
